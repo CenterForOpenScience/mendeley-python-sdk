@@ -1,0 +1,22 @@
+language: python
+
+sudo: false
+
+python:
+  - "2.7"
+  - "3.4"
+
+# Ignore tests we cannot run in the CI environment
+# such as those needing user access tokens.
+script: py.test --ignore=test/manual/
+
+deploy:
+  - provider: pypi
+    user: $PYPI_USERNAME
+    password: $PYPI_PASSWORD
+    on:
+      tags: true
+  - provider: script
+    script: curl -X POST https://readthedocs.org/build/mendeley-python
+    on:
+      tags: true

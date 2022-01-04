@@ -84,6 +84,13 @@ Files
 .. autoclass:: mendeley.models.files.File()
     :members:
 
+Annotations
+-----------
+
+.. autoclass:: mendeley.models.annotations.Annotation()
+    :members:
+
+
 Common objects
 --------------
 

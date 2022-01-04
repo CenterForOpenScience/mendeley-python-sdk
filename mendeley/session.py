@@ -1,6 +1,7 @@
 import platform
 
 from future.moves.urllib.parse import urljoin
+from oauthlib.oauth2 import TokenExpiredError
 from requests_oauthlib import OAuth2Session
 
 from mendeley.exception import MendeleyApiException
@@ -11,6 +12,11 @@ from mendeley.version import __version__
 class MendeleySession(OAuth2Session):
     """
     Entry point for accessing Mendeley resources.
+
+    .. attribute:: annotations
+
+        A :class: `Annotations <mendeley.resources.annotations.Annotations>` resource for accessing annotations in the
+        logged-in user's library.
 
     .. attribute:: catalog
 
@@ -42,20 +48,16 @@ class MendeleySession(OAuth2Session):
        user's library.
     """
 
-    def __init__(self, mendeley, token):
-        if mendeley.client_secret:
-            refresh_args = {'client_id': mendeley.client_id, 'client_secret': mendeley.client_secret}
-
-            super(MendeleySession, self).__init__(client_id=mendeley.client_id,
-                                                  token=token,
-                                                  auto_refresh_url='%s/oauth/token' % mendeley.host,
-                                                  auto_refresh_kwargs=refresh_args,
-                                                  token_updater=lambda x: None)
+    def __init__(self, mendeley, token, client=None, refresher=None):
+        if client:
+            super(MendeleySession, self).__init__(client=client, token=token)
         else:
             super(MendeleySession, self).__init__(client_id=mendeley.client_id, token=token)
 
         self.host = mendeley.host
+        self.refresher = refresher
 
+        self.annotations = Annotations(self)
         self.catalog = Catalog(self)
         self.documents = Documents(self, None)
         self.files = Files(self)
@@ -93,12 +95,23 @@ class MendeleySession(OAuth2Session):
 
         headers['user-agent'] = self.__user_agent()
 
-        rsp = super(MendeleySession, self).request(method, full_url, data, headers, **kwargs)
+        try:
+            rsp = self.__do_request(data, full_url, headers, kwargs, method)
+        except TokenExpiredError:
+            if self.refresher:
+                self.refresher.refresh(self)
+                rsp = self.__do_request(data, full_url, headers, kwargs, method)
+            else:
+                raise
 
         if rsp.ok:
             return rsp
         else:
             raise MendeleyApiException(rsp)
+
+    def __do_request(self, data, full_url, headers, kwargs, method):
+        rsp = super(MendeleySession, self).request(method, full_url, data, headers, **kwargs)
+        return rsp
 
     @staticmethod
     def __user_agent():
